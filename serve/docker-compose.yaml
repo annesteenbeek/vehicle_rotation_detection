@@ -1,0 +1,28 @@
+version: "2.3"
+
+services:
+  torchserve_compose_service:
+    build:
+      context: ./
+      dockerfile: Dockerfile
+      args:
+        - CUV=cu110 # change this to match host pc Cuda version
+
+    volumes:
+      - type: bind
+        source: ./model-store
+        target: /home/model-server/model-store
+
+    container_name: vehicle_orientation
+
+    runtime: nvidia
+
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=1
+
+    ports:
+      - 3002:8080
+      - 3003:8081
+
+    entrypoint:
+      "torchserve --start --model-store model-store --models vehicle_orientation.mar --foreground"
