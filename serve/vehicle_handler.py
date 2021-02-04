@@ -102,7 +102,8 @@ class VehicleHandler(object):
             # set the testing threshold for this model
             cfg.MODEL.ROI_HEADS.SCORE_THRESH_TEST = 0.5
 
-            self.predictor = RotatedPredictor(cfg)
+            # self.predictor = RotatedPredictor(cfg)
+            self.predictor = DefaultPredictor(cfg)
 
             self._batch_size = properties["batch_size"]
 
