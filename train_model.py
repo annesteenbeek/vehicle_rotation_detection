@@ -20,8 +20,8 @@ train_path = os.path.join(dataset_path, 'train')
 test_path = os.path.join(dataset_path, 'val')
 
 # train_path = '/data2/anne/UIVER/datasets/DOTA/dotadevkit/example'
-class_name_list = ["small-vehicle", "large-vehicle"]
-# class_name_list = ["small-vehicle"]
+# class_name_list = ["small-vehicle", "large-vehicle"]
+class_name_list = ["small-vehicle"]
 
 DatasetCatalog.clear()
 MetadataCatalog.clear()
@@ -34,7 +34,7 @@ MetadataCatalog.get("Test").set(thing_classes=class_name_list)
 
 cfg = get_cfg()
 
-cfg.OUTPUT_DIR = os.path.join(dataset_path, 'output_rcnn_small_vehicle')
+cfg.OUTPUT_DIR = os.path.join(dataset_path, 'output_rcnn_small_vehicle_2')
 
 cfg.merge_from_file(model_zoo.get_config_file("COCO-InstanceSegmentation/mask_rcnn_R_50_FPN_3x.yaml"))
 cfg.MODEL.WEIGHTS = model_zoo.get_checkpoint_url("COCO-InstanceSegmentation/mask_rcnn_R_50_FPN_3x.yaml")  # Let training initialize from model zoo
@@ -59,13 +59,12 @@ cfg.MODEL.ROI_BOX_HEAD.POOLER_TYPE = "ROIAlignRotated"
 cfg.MODEL.ROI_BOX_HEAD.BBOX_REG_WEIGHTS = (10,10,5,5,1)
 cfg.MODEL.ROI_BOX_HEAD.NUM_CONV=4
 cfg.MODEL.ROI_MASK_HEAD.NUM_CONV=8
-cfg.SOLVER.IMS_PER_BATCH = 10 # reduce for memory
+cfg.SOLVER.IMS_PER_BATCH = 20 # reduce for memory
 cfg.SOLVER.CHECKPOINT_PERIOD=1500
 cfg.SOLVER.BASE_LR = 0.005
 cfg.SOLVER.GAMMA=0.5
 cfg.SOLVER.STEPS=[1000,2000,4000,8000, 12000]
-# cfg.SOLVER.MAX_ITER=28000 # 14000
-cfg.SOLVER.MAX_ITER=14000 # 14000
+cfg.SOLVER.MAX_ITER=28000 # 14000
 
 # epoch is MAX_ITER * BATCH_SIZE / TOTAL_NUM_IMAGES
 
@@ -86,5 +85,5 @@ def main():
 
 
 if __name__ == "__main__":
-  # launch(main, 2, dist_url='auto')
-  main()
+  launch(main, 2, dist_url='auto')
+  # main()

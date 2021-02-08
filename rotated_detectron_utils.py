@@ -1,7 +1,7 @@
 import cv2
 import logging
 import numpy as np
-import torch
+import torch.utils.data
 import os
 import copy
 from detectron2.structures.rotated_boxes import RotatedBoxes
@@ -9,12 +9,17 @@ from detectron2.utils.visualizer import Visualizer
 from detectron2.structures import BoxMode
 from detectron2.engine import DefaultTrainer, DefaultPredictor
 from detectron2.evaluation import RotatedCOCOEvaluator, DatasetEvaluators
-from detectron2.data import build_detection_train_loader, detection_utils, DatasetCatalog
+from detectron2.data import build_detection_train_loader, detection_utils, DatasetCatalog, get_detection_dataset_dicts
 from detectron2.data import transforms as T
 from detectron2.modeling import build_model
 from detectron2.utils.logger import log_every_n
 from detectron2.data.samplers import TrainingSampler
 from detectron2.utils.comm import get_world_size
+
+import detectron2.data.build
+import detectron2.data
+
+from detectron2.data.common import ToIterableDataset
 
 from torch.utils.data.dataloader import DataLoader
 
@@ -65,16 +70,6 @@ class MyIterableDataset(torch.utils.data.IterableDataset):
 
     def __iter__(self):
         worker_info = torch.utils.data.get_worker_info()
-        # if worker_info is None:  # single-process data loading, return the full iterator
-        #     iter_start = self.start
-        #     iter_end = self.end
-        # else:  # in a worker process
-        #     # split workload
-        #     per_worker = int(math.ceil((self.end - self.start) / float(worker_info.num_workers)))
-        #     worker_id = worker_info.id
-        #     iter_start = self.start + worker_id * per_worker
-        #     iter_end = min(iter_start + per_worker, self.end)
-        # return iter(range(iter_start, iter_end))
         for dict in self.dataset_dict_list:
           yield rotated_mapper(dict)
 
@@ -87,28 +82,43 @@ class RotatedTrainer(DefaultTrainer):
       
   @classmethod
   def build_train_loader(cls, cfg):
-    # Return dataloader with iterable dataset
-    # return build_detection_train_loader(iterable_dataset)
-    # train_dict = DatasetCatalog.get("Train")
-    # dataset = MyIterableDataset(train_dict)
-    # sampler = TrainingSampler(len(train_dict))
+    return build_detection_train_loader(cfg, mapper=rotated_mapper)
 
-    # num_workers = cfg.DATALOADER.NUM_WORKERS
-    # total_batch_size = cfg.SOLVER.IMS_PER_BATCH
+  # @classmethod
+  # def build_train_loader(cls, cfg):
+  #   # get dataset in detectron dict format
+  #   train_dict = get_detection_dataset_dicts(
+  #       cfg.DATASETS.TRAIN,
+  #       filter_empty=cfg.DATALOADER.FILTER_EMPTY_ANNOTATIONS,
+  #   )
 
-    # world_size = get_world_size()
-    # assert (
-    #     total_batch_size > 0 and total_batch_size % world_size == 0
-    # ), "Total batch size ({}) must be divisible by the number of gpus ({}).".format(
-    #     total_batch_size, world_size
-    # )
-    # batch_size = total_batch_size // world_size
+  #   dataset = detectron2.data.DatasetFromList(train_dict, copy=False)
+  #   sampler = TrainingSampler(len(train_dict))
+  #   # add mapper to dataset
+  #   dataset = detectron2.data.MapDataset(dataset, rotated_mapper)
 
-    # # return DataLoader(dataset, sampler=sampler, num_workers=num_workers)
-    # # return DataLoader(dataset, batch_size=batch_size)
+  #   num_workers = cfg.DATALOADER.NUM_WORKERS
+  #   total_batch_size = cfg.SOLVER.IMS_PER_BATCH
+
+  #   world_size = get_world_size()
+  #   batch_size = total_batch_size // world_size
+
+  #   # wrap sampler to generate batches
+  #   batch_sampler = torch.utils.data.sampler.BatchSampler(
+  #     sampler, batch_size, drop_last=True
+  #   )
+
+  #   dataset = detectron2.data.common.ToIterableDataset(dataset, sampler)
+
+  #   return torch.utils.data.DataLoader(
+  #     dataset,
+  #     num_workers=num_workers,
+  #     batch_sampler=batch_sampler,
+  #     collate_fn=detectron2.data.build.trivial_batch_collator,
+  #     worker_init_fn=detectron2.data.build.worker_init_reset_seed,
+  #   )
 
 
-      return build_detection_train_loader(cfg, mapper=rotated_mapper)
 
 class RotatedPredictor(DefaultPredictor):
     def __init__(self, cfg):
@@ -168,6 +178,10 @@ def rotated_transform_instance_annotations(annotation, transforms, image_size, *
 
   return annotation
 
+def convolve_iterator_mapper(dataset_dict):
+    pass
+
+
 def rotated_mapper(original_dataset_dict):
   # Implement a mapper, similar to the default DatasetMapper, but with our own customizations
 
@@ -178,26 +192,41 @@ def rotated_mapper(original_dataset_dict):
 
   target_size = 400
   target_crop = int(target_size / scale)
+  target_crop = (target_crop, target_crop)
 
   image_np = detection_utils.read_image(dataset_dict["file_name"], format="BGR")
 
   boxes = np.asarray([anno['bbox'] for anno in dataset_dict['annotations']])
 
+
+  # select anno at random
+  # draw random center
+
+  # h, w = image_np.shape[:2]
+  # rand_box = boxes[np.random.randint(len(boxes))]
+  # ch, cw = rand_box[:2]
+  # xmin = np.min()
+  # xmax = np.max()
+  # ymin = 3
+  # ymax = 4
+
+  # h0 = np.random.randint(min(h, ymin), min(h, ymax) + 1)
+  # w0 = np.random.randint(min(w, xmin), min(w, xmax) + 1)
+  # assert h >= target_crop[1] and w >= target_crop[0], "Shape computation has bugs."
+
+  # crop = T.CropTransform(w0, h0, target_crop)
+
   # make sure random crop contains annotations
   i = 0
   while True:
-    random_crop = T.RandomCrop('absolute', (target_crop, target_crop)).get_transform(image_np)
+    random_crop = T.RandomCrop('absolute', target_crop).get_transform(image_np)
     cropped_boxes = RotatedBoxes(random_crop.apply_coords(copy.deepcopy(boxes)))
-    inside_ind = cropped_boxes.inside_box((target_crop, target_crop))
+    inside_ind = cropped_boxes.inside_box(target_crop)
     if 1 < sum(inside_ind) <= 100:
       break
-
     i += 1
-    if i  % 100 == 1:
-      # logger.warning("Cropping taking long time to find area for the %dth time" % i)
-      # return None
-      pass
-
+    if i > 150:
+      return None
 
   image, transforms = T.apply_transform_gens([
                                               random_crop,
@@ -223,16 +252,7 @@ def rotated_mapper(original_dataset_dict):
   return dataset_dict
 
 def crop_rotated_box(transform, rotated_boxes):
-  """
-  Apply the crop transform on rotated boxes.
-
-  Args:
-      rotated_boxes (ndarray): Nx5 floating point array of
-          (x_center, y_center, width, height, angle_degrees) format
-          in absolute coordinates.
-  """
-  return transform.apply_coords(rotated_boxes)
-
+ return transform.apply_coords(rotated_boxes)
 
 T.CropTransform.register_type('rotated_box', crop_rotated_box)
 
