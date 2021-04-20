@@ -83,9 +83,9 @@ class VehicleHandler(object):
             self.manifest = context.manifest
             properties = context.system_properties
 
-            model_dir = properties.get("model_dir")
+            self.model_dir = properties.get("model_dir")
             serialized_file = self.manifest['model']['serializedFile']
-            model_pt_path = os.path.join(model_dir, serialized_file)
+            model_pt_path = os.path.join(self.model_dir, serialized_file)
 
             assert os.path.exists(model_pt_path), "Model not found in %s" % model_pt_path
             assert os.path.exists(self.config_file), "Config not found in %s" % self.config_file
@@ -100,7 +100,7 @@ class VehicleHandler(object):
             cfg.MODEL.WEIGHTS = model_pt_path
 
             # set the testing threshold for this model
-            cfg.MODEL.ROI_HEADS.SCORE_THRESH_TEST = 0.5
+            # cfg.MODEL.ROI_HEADS.SCORE_THRESH_TEST = 0.5
 
             # self.predictor = RotatedPredictor(cfg)
             self.predictor = DefaultPredictor(cfg)
@@ -142,6 +142,7 @@ class VehicleHandler(object):
             # read the bytes of the image
             input = io.BytesIO(request_body)
             img = np.asarray(Image.open(input), dtype=np.uint8)
+            img = img[:,:,::-1] # expect RGB in, NN wants BGR
 
             images.append(img)
 
